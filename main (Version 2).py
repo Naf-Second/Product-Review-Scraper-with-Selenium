@@ -1,14 +1,11 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 import time
 import pandas as pd
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
 import os
-import math
+
 
 
 def append_to_excel(filename, new_data, sheet_name='Sheet1'):
@@ -22,29 +19,13 @@ def append_to_excel(filename, new_data, sheet_name='Sheet1'):
         updated_data.to_excel(writer, index=False, sheet_name=sheet_name)
 
 
-def uniquenesscheck(filename, new_data, sheet_name='Sheet1'):
+def uniquenesscheck(filename, sheet_name='Sheet1'):
+    unique_user_ids_set = set()
     if os.path.exists(filename):
-        # File exists, read the existing data
         existing_data = pd.read_excel(filename, sheet_name=sheet_name)
         if 'User ID' in existing_data.columns and not existing_data['User ID'].isnull().all():
-            unique_user_ids = existing_data['User ID'].unique()
-            unique_user_ids_list = unique_user_ids.tolist()
-        else:
-            unique_user_ids_list = []
-    else:
-
-        existing_data = pd.DataFrame(columns=new_data.columns)
-        unique_user_ids_list = []
-
-
-    if 'User ID' in new_data.columns and not new_data['User ID'].isnull().all():
-        new_unique_user_ids = new_data['User ID'].unique()
-        
-
-        if any(user_id in unique_user_ids_list for user_id in new_unique_user_ids):
-            return False
-
-    return True
+            unique_user_ids_set = set(existing_data['User ID'].unique())
+    return unique_user_ids_set
 
 def scrape_review_links(url):
 
@@ -58,9 +39,6 @@ def scrape_review_links(url):
         # Scroll down to the end of the page
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(5)  # Allow time for the page to load new content if any
-
-        # Wait for the review section to be loaded
-        reviews_section = wait.until(EC.presence_of_element_located((By.ID, 'ReviewsAccordion')))
 
         # Find the review elements
         rev = driver.find_elements(By.CLASS_NAME, "pageWithFooter")
@@ -92,7 +70,7 @@ def scrape_review_links(url):
     
     return urls_array    
 
-def scrape_page(driver):
+def scrape_page(driver,unique_user_ids_set):
     names = []
     ratingsall = []
     productids = []
@@ -115,10 +93,12 @@ def scrape_page(driver):
     for product in products:
         names.append(product.text)
         userid.append(user)
-    data = pd.DataFrame({"User ID": userid})
-    if not uniquenesscheck("E:/Scraping/beautylish_products.xlsx", data):
+        
+    if user in unique_user_ids_set:
         print(f"User {user} already exists. Skipping...")
         return False
+    else:
+        unique_user_ids_set.add(user)
 # scraping and appending product id
 
     for result in product_id_elements:
@@ -224,12 +204,12 @@ driver = webdriver.Chrome()
 
 
 # Open the first page
-url = "https://www.beautylish.com/p/bioderma-hydrabio-h2o"
+url = "https://www.beautylish.com/s/sugarpill-cosmetics-rapture-false-eyelashes"
 
 product_name = product_existence_check(driver, url)
 
 
-df = pd.read_excel('E:/Scraping/beautylish_products.xlsx')
+df = pd.read_excel('E:/Scraping/beautylish_products4.xlsx')
 value_counts = df['Product Name'].value_counts()
 if product_name:
     filtered_count = value_counts.get(product_name, 0)
@@ -245,6 +225,7 @@ if(link_size-filtered_count<=7):
 else:
     reviews_collected = 0
     reviews_skipped = 0
+    unique_user_ids_set = uniquenesscheck("E:/Scraping/beautylish_products4.xlsx")
     for url in review_links:
         try:
             driver = webdriver.Chrome()
@@ -265,7 +246,7 @@ else:
         check = False
         while True:
             time.sleep(2)
-            new_data = scrape_page(driver)
+            new_data = scrape_page(driver,unique_user_ids_set)
             if new_data is not False:
                 check = True
                 all_data = pd.concat([all_data, new_data], ignore_index=True)
@@ -287,8 +268,8 @@ else:
 
         # Append the data to the Excel file
         if(check==True):
-            append_to_excel("E:/Scraping/beautylish_products.xlsx", all_data)
-            print("Titles and ratings have been saved to beautylish_products.xlsx")
+            append_to_excel("E:/Scraping/beautylish_products4.xlsx", all_data)
+            print("Titles and ratings have been saved to beautylish_products4.xlsx")
         else:
             print(url)
             reviews_skipped += 1
