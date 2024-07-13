@@ -185,7 +185,13 @@ url = "https://www.beautylish.com/p/revlon-colorburst-lip-butter"
 
 product_name = product_existence_check(driver, url)
 
-df = pd.read_excel('E:/Scraping/beautylish_products4.xlsx')
+try:
+    df = pd.read_excel('beautylish_products4.xlsx')
+except FileNotFoundError:
+    data = {'User ID': [], 'Product Name': [], 'Product ID': [], 'Product Rating': [], 'User Review Title': [], 'Review Description': []}
+    df = pd.DataFrame(data)
+    df.to_excel('beautylish_products4.xlsx', index=False)
+    
 value_counts = df['Product Name'].value_counts()
 if product_name:
     filtered_count = value_counts.get(product_name, 0)
