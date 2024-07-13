@@ -26,6 +26,7 @@ def load_unique_user_ids(filename, sheet_name='Sheet1'):
 
 def scrape_review_links(url):
     urls_array = []
+    i=0
     try:
         driver.get(url)
 
@@ -65,7 +66,7 @@ def scrape_review_links(url):
     
     return urls_array
 
-def scrape_page(driver, unique_user_ids_set):
+def scrape_page(driver):
     names = []
     ratingsall = []
     productids = []
@@ -82,12 +83,6 @@ def scrape_page(driver, unique_user_ids_set):
         user = user[4]
     else:
         user = user[3]
-
-    if user in unique_user_ids_set:
-        print(f"User {user} already exists. Skipping...")
-        return False
-    else:
-        unique_user_ids_set.add(user)
 
     for product in products:
         names.append(product.text)
@@ -169,11 +164,11 @@ def product_existence_check(driver, url):
     time.sleep(3)
     products = driver.find_elements(By.CSS_SELECTOR, "div.jss2038")
     for product in products:
-        product_texts = product.find_element(By.CLASS_NAME, "MuiTypography-root.MuiLink-root.MuiLink-underlineHover.jss2039.MuiTypography-colorPrimary")
+        product_texts = product.find_element(By.CLASS_NAME, "fluid.contentRegion")
         text = product_texts.text
         text = text.title()
         text += " "
-        product_texts = product.find_element(By.CLASS_NAME, "MuiTypography-root.jss2040.MuiTypography-body1")
+        product_texts = product.find_element(By.CLASS_NAME, "view_lockup")
         text += product_texts.text
         return text
 
@@ -181,35 +176,44 @@ def product_existence_check(driver, url):
 driver = webdriver.Chrome()
 
 # Open the first page
-url = "https://www.beautylish.com/p/revlon-colorburst-lip-butter"
+url = "https://www.beautylish.com/p/vaseline-petroleum-jelly"
 
 product_name = product_existence_check(driver, url)
-
+            #fix the path here
 try:
-    df = pd.read_excel('beautylish_products4.xlsx')
+    df = pd.read_excel('E:/Scraping/beautylish_products4.xlsx')
 except FileNotFoundError:
     data = {'User ID': [], 'Product Name': [], 'Product ID': [], 'Product Rating': [], 'User Review Title': [], 'Review Description': []}
     df = pd.DataFrame(data)
-    df.to_excel('beautylish_products4.xlsx', index=False)
+    df.to_excel('E:/Scraping/beautylish_products4.xlsx', index=False)
     
+
 value_counts = df['Product Name'].value_counts()
 if product_name:
     filtered_count = value_counts.get(product_name, 0)
     print(f"Count for '{product_name}' in the Excel file: {filtered_count}")
+    
 filtered_count = 0
 review_links = scrape_review_links(url)
-print(len(review_links))
-
+print(f'Number of profile links collected: {(len(review_links))}')
 time.sleep(2)
+
+#fix the path here
+unique_user_ids_set = load_unique_user_ids('E:/Scraping/beautylish_products4.xlsx')
+process_links = [link for link in review_links if link.split('/')[-2] not in unique_user_ids_set]
+print(f'Lenght of processed_links array: {(len(process_links))}')
+
+process_links = list(set(link for link in review_links if link.split('/')[-2] not in unique_user_ids_set))
+
 link_size = len(review_links)
-print(link_size)
+print(f'Lenght of processed_links array after applying set: {(len(process_links))}')
+
 if link_size - filtered_count <= 7:
     print("Product has already been scraped.")
 else:
     reviews_collected = 0
-    unique_user_ids_set = load_unique_user_ids("E:/Scraping/beautylish_products4.xlsx")
-
-    for url in review_links:
+    all_data = pd.DataFrame()
+    for url in process_links:
         try:
             driver = webdriver.Chrome()
             driver.get(url)
@@ -222,11 +226,11 @@ else:
             print(url)
             continue
 
-        all_data = pd.DataFrame()
+        
         check = False
         while True:
             time.sleep(2)
-            new_data = scrape_page(driver, unique_user_ids_set)
+            new_data = scrape_page(driver)
             if new_data is not False:
                 check = True
                 all_data = pd.concat([all_data, new_data], ignore_index=True)
@@ -243,8 +247,9 @@ else:
         driver.quit()
 
         if check:
+            #fix the path here
             append_to_excel("E:/Scraping/beautylish_products4.xlsx", all_data)
             print("Titles and ratings have been saved to beautylish_products4.xlsx")
         else:
             print(url)
-            print("User Already Exists")
+        print("User Already Exists")
